@@ -1,0 +1,43 @@
+#!/bin/env python3
+import json
+import sys
+import subprocess
+
+# Run AMDGPU
+with subprocess.Popen(["amdgpu_top", "-d", "-J"], stdout = subprocess.PIPE) as proc:
+	data = json.load(proc.stdout)
+
+# Build custom directory to map to argv
+arg_data = {
+	"gpu_name": data[0]["DeviceName"],
+	"gfx_usage": data[0]["gpu_activity"]["GFX"]["value"],
+	"total_vram": data[0]["VRAM"]["Total VRAM"]["value"],
+	"used_vram": data[0]["VRAM"]["Total VRAM Usage"]["value"],
+	"gpu_power": data[0]["Sensors"]["GFX Power"]["value"],
+	"gpu_power_max": data[0]["Power Cap"]["current"],
+	"gpu_temp": data[0]["Sensors"]["Edge Temperature"]["value"],
+	"gpu_fan": data[0]["Sensors"]["Fan"]["value"],
+	"gpu_fan_max": data[0]["Sensors"]["Fan Max"]["value"],
+	"gpu_sclk": data[0]["Sensors"]["GFX_MCLK"]["value"]
+}
+
+# Add percentages
+arg_data.update({
+	"used_vram_perc": round(arg_data["used_vram"] / arg_data["total_vram"] * 100, 2)
+})
+
+# List keys
+if sys.argv[-1] == "list":
+	print(arg_data.keys())
+	raise SystemExit(0)
+elif sys.argv[-1] == "list_src":
+	import pprint
+	pprint.pprint(data)
+	raise SystemExit(1)
+
+# Output
+try:
+	print(arg_data[sys.argv[-1]])
+except KeyError:
+	print("-1")
+	

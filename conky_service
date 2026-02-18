@@ -1,0 +1,68 @@
+#!/bin/env python3
+from datetime import datetime
+import dbus
+from dbus.mainloop.glib import DBusGMainLoop
+from gi.repository import GLib
+import os
+import subprocess
+import atexit
+import signal
+
+conky_proc = None
+
+def ping(address):
+	proc = subprocess.run(["ping", address, "-c", "1", "-W", "1"], stdout = subprocess.DEVNULL, stderr = subprocess.DEVNULL)
+	if proc.returncode > 0:
+		return False
+	else:
+		return True
+
+def start_conky():
+	# Set remote display
+	os.putenv("DISPLAY", "192.168.2.1:0")
+
+	# Start conky
+	global conky_proc
+	conky_proc = subprocess.Popen(["conky"])
+
+def stop_conky():
+	global conky_proc
+	if not conky_proc:
+		print("WARNING: stop_conky called with NULL conky_proc!")
+		return
+
+	conky_proc.send_signal(signal.SIGTERM)
+
+# Setup handler to stop conky proc on Python exit
+atexit.register(stop_conky)
+
+# Start conky
+start_conky()
+
+def handle_sleep(*args):
+	if args[0]:
+		print("Sleep receieved, killing conky.")
+		stop_conky()
+	else:
+		print("We're awake!!! waiting on network...")
+		while not ping("192.168.2.1"):
+			print(".", end = "")
+
+		print("\nNetwork back up! restarting conky.")
+		start_conky()
+
+# Setup D-bus
+DBusGMainLoop(set_as_default=True)     # integrate into gobject main loop
+bus = dbus.SystemBus()                 # connect to system wide dbus
+
+# Listen for sleep entry and exit
+bus.add_signal_receiver(               # define the signal to listen to
+	handle_sleep,                      # callback function
+	'PrepareForSleep',                 # signal name
+	'org.freedesktop.login1.Manager',  # interface
+	'org.freedesktop.login1'           # bus name
+)
+
+# Run D-bus main loop
+loop = GLib.MainLoop()
+loop.run()
